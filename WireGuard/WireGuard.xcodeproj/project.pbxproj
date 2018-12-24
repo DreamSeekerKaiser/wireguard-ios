@@ -50,6 +50,7 @@
 		6F86285C21D0EB1F00223229 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86285B21D0EB1F00223229 /* MainViewController.swift */; };
 		6F86285E21D0EBE800223229 /* TunnelsListTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86285D21D0EBE800223229 /* TunnelsListTableViewController.swift */; };
 		6F86285F21D0EDD600223229 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6FE1765421C90BBE002690EA /* Localizable.strings */; };
+		6F86286121D0EF0500223229 /* MainMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86286021D0EF0500223229 /* MainMenu.swift */; };
 		6F919EC3218A2AE90023B400 /* ErrorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F919EC2218A2AE90023B400 /* ErrorPresenter.swift */; };
 		6F919ED9218C65C50023B400 /* wireguard_doc_logo_22x29.png in Resources */ = {isa = PBXBuildFile; fileRef = 6F919ED5218C65C50023B400 /* wireguard_doc_logo_22x29.png */; };
 		6F919EDA218C65C50023B400 /* wireguard_doc_logo_44x58.png in Resources */ = {isa = PBXBuildFile; fileRef = 6F919ED6218C65C50023B400 /* wireguard_doc_logo_44x58.png */; };
@@ -226,6 +227,7 @@
 		6F86285721D0E5D200223229 /* Application.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Application.swift; sourceTree = "<group>"; };
 		6F86285B21D0EB1F00223229 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		6F86285D21D0EBE800223229 /* TunnelsListTableViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelsListTableViewController.swift; sourceTree = "<group>"; };
+		6F86286021D0EF0500223229 /* MainMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainMenu.swift; sourceTree = "<group>"; };
 		6F919EC2218A2AE90023B400 /* ErrorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorPresenter.swift; sourceTree = "<group>"; };
 		6F919ED5218C65C50023B400 /* wireguard_doc_logo_22x29.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = wireguard_doc_logo_22x29.png; sourceTree = "<group>"; };
 		6F919ED6218C65C50023B400 /* wireguard_doc_logo_44x58.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = wireguard_doc_logo_44x58.png; sourceTree = "<group>"; };
@@ -444,6 +446,7 @@
 				6F86285721D0E5D200223229 /* Application.swift */,
 				6FDAA03E21CE6A3B00FA6925 /* AppDelegate.swift */,
 				6FDAA04021CE6A3D00FA6925 /* Assets.xcassets */,
+				6F86286021D0EF0500223229 /* MainMenu.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -912,6 +915,7 @@
 				6FDAA06421CE6E0900FA6925 /* IPAddressRange.swift in Sources */,
 				6FDAA06521CE6E0900FA6925 /* Endpoint.swift in Sources */,
 				6FDAA06621CE6E0900FA6925 /* DNSServer.swift in Sources */,
+				6F86286121D0EF0500223229 /* MainMenu.swift in Sources */,
 				6FDAA06721CE6E0900FA6925 /* InterfaceConfiguration.swift in Sources */,
 				6FDAA06821CE6E0900FA6925 /* PeerConfiguration.swift in Sources */,
 				6FDAA06921CE6E0900FA6925 /* FileManager+Extension.swift in Sources */,

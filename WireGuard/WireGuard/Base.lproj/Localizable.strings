@@ -7,9 +7,13 @@
 "actionCancel" = "Cancel";
 "actionSave" = "Save";
 
-// Tunnels list UI
+// macOS-specific
 
 "appName" = "WireGuard";
+"menuTitleFile" = "File";
+
+// Tunnels list UI
+
 "tunnelsListTitle" = "WireGuard";
 "tunnelsListSettingsButtonTitle" = "Settings";
 "tunnelsListCenteredAddTunnelButtonTitle" = "Add a tunnel";
