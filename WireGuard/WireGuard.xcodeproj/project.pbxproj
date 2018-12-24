@@ -49,6 +49,7 @@
 		6F86285921D0E72300223229 /* Application.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86285721D0E5D200223229 /* Application.swift */; };
 		6F86285C21D0EB1F00223229 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86285B21D0EB1F00223229 /* MainViewController.swift */; };
 		6F86285E21D0EBE800223229 /* TunnelsListTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F86285D21D0EBE800223229 /* TunnelsListTableViewController.swift */; };
+		6F86285F21D0EDD600223229 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6FE1765421C90BBE002690EA /* Localizable.strings */; };
 		6F919EC3218A2AE90023B400 /* ErrorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F919EC2218A2AE90023B400 /* ErrorPresenter.swift */; };
 		6F919ED9218C65C50023B400 /* wireguard_doc_logo_22x29.png in Resources */ = {isa = PBXBuildFile; fileRef = 6F919ED5218C65C50023B400 /* wireguard_doc_logo_22x29.png */; };
 		6F919EDA218C65C50023B400 /* wireguard_doc_logo_44x58.png in Resources */ = {isa = PBXBuildFile; fileRef = 6F919ED6218C65C50023B400 /* wireguard_doc_logo_44x58.png */; };
@@ -732,6 +733,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6FDAA04121CE6A3D00FA6925 /* Assets.xcassets in Resources */,
+				6F86285F21D0EDD600223229 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

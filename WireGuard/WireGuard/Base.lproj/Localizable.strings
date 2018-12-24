@@ -9,6 +9,7 @@
 
 // Tunnels list UI
 
+"appName" = "WireGuard";
 "tunnelsListTitle" = "WireGuard";
 "tunnelsListSettingsButtonTitle" = "Settings";
 "tunnelsListCenteredAddTunnelButtonTitle" = "Add a tunnel";

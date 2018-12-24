@@ -5,6 +5,7 @@ import Cocoa
 
 class TunnelsListTableViewController: NSViewController {
     override func loadView() {
+        self.title = tr("tunnelsListTitle")
         let tableView = NSTableView()
         let scrollView = NSScrollView()
         let contentView = NSClipView()

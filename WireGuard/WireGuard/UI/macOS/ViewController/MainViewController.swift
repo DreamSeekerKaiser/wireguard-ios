@@ -13,7 +13,7 @@ class MainViewController: NSSplitViewController {
 
         super.init(nibName: nil, bundle: nil)
 
-        self.title = "WireGuard"
+        self.title = tr("appName")
 
         // When resizing the window, the detail view should resize along with the window
         detailSVI.holdingPriority = .defaultLow
