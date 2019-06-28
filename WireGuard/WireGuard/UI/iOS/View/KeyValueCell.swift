@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import UIKit
 
@@ -68,8 +68,10 @@ class KeyValueCell: UITableViewCell {
     var isStackedVertically = false
     var contentSizeBasedConstraints = [NSLayoutConstraint]()
 
-    var onValueChanged: ((String) -> Void)?
+    var onValueChanged: ((String, String) -> Void)?
     var onValueBeingEdited: ((String) -> Void)?
+
+    var observationToken: AnyObject?
 
     private var textFieldValueOnBeginEditing: String = ""
 
@@ -187,6 +189,7 @@ class KeyValueCell: UITableViewCell {
         keyboardType = .default
         onValueChanged = nil
         onValueBeingEdited = nil
+        observationToken = nil
         key = ""
         value = ""
         configureForContentSize()
@@ -203,7 +206,7 @@ extension KeyValueCell: UITextFieldDelegate {
     func textFieldDidEndEditing(_ textField: UITextField) {
         let isModified = textField.text ?? "" != textFieldValueOnBeginEditing
         guard isModified else { return }
-        onValueChanged?(textField.text ?? "")
+        onValueChanged?(textFieldValueOnBeginEditing, textField.text ?? "")
     }
 
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {

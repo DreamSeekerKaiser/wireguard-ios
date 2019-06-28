@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import UIKit
 
@@ -21,6 +21,8 @@ class SwitchCell: UITableViewCell {
     }
 
     var onSwitchToggled: ((Bool) -> Void)?
+
+    var observationToken: AnyObject?
 
     let switchView = UISwitch()
 
@@ -45,5 +47,6 @@ class SwitchCell: UITableViewCell {
         isEnabled = true
         message = ""
         isOn = false
+        observationToken = nil
     }
 }

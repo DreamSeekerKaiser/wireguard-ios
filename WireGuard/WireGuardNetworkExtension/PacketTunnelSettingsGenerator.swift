@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import Foundation
 import Network
@@ -17,8 +17,10 @@ class PacketTunnelSettingsGenerator {
     func endpointUapiConfiguration() -> String {
         var wgSettings = ""
         for (index, peer) in tunnelConfiguration.peers.enumerated() {
-            wgSettings.append("public_key=\(peer.publicKey.hexEncodedString())\n")
-            if let endpoint = resolvedEndpoints[index] {
+            if let publicKey = peer.publicKey.hexKey() {
+                wgSettings.append("public_key=\(publicKey)\n")
+            }
+            if let endpoint = resolvedEndpoints[index]?.withReresolvedIP() {
                 if case .name(_, _) = endpoint.host { assert(false, "Endpoint is not resolved") }
                 wgSettings.append("endpoint=\(endpoint.stringRepresentation)\n")
             }
@@ -28,8 +30,9 @@ class PacketTunnelSettingsGenerator {
 
     func uapiConfiguration() -> String {
         var wgSettings = ""
-        let privateKey = tunnelConfiguration.interface.privateKey.hexEncodedString()
-        wgSettings.append("private_key=\(privateKey)\n")
+        if let privateKey = tunnelConfiguration.interface.privateKey.hexKey() {
+            wgSettings.append("private_key=\(privateKey)\n")
+        }
         if let listenPort = tunnelConfiguration.interface.listenPort {
             wgSettings.append("listen_port=\(listenPort)\n")
         }
@@ -38,11 +41,13 @@ class PacketTunnelSettingsGenerator {
         }
         assert(tunnelConfiguration.peers.count == resolvedEndpoints.count)
         for (index, peer) in tunnelConfiguration.peers.enumerated() {
-            wgSettings.append("public_key=\(peer.publicKey.hexEncodedString())\n")
-            if let preSharedKey = peer.preSharedKey {
-                wgSettings.append("preshared_key=\(preSharedKey.hexEncodedString())\n")
+            if let publicKey = peer.publicKey.hexKey() {
+                wgSettings.append("public_key=\(publicKey)\n")
             }
-            if let endpoint = resolvedEndpoints[index] {
+            if let preSharedKey = peer.preSharedKey?.hexKey() {
+                wgSettings.append("preshared_key=\(preSharedKey)\n")
+            }
+            if let endpoint = resolvedEndpoints[index]?.withReresolvedIP() {
                 if case .name(_, _) = endpoint.host { assert(false, "Endpoint is not resolved") }
                 wgSettings.append("endpoint=\(endpoint.stringRepresentation)\n")
             }
@@ -63,20 +68,7 @@ class PacketTunnelSettingsGenerator {
          * make sense. So, we fill it in with this placeholder, which is not
          * a valid IP address that will actually route over the Internet.
          */
-        var remoteAddress = "0.0.0.0"
-        let endpointsCompact = resolvedEndpoints.compactMap { $0 }
-        if endpointsCompact.count == 1 {
-            switch endpointsCompact.first!.host {
-            case .ipv4(let address):
-                remoteAddress = "\(address)"
-            case .ipv6(let address):
-                remoteAddress = "\(address)"
-            default:
-                break
-            }
-        }
-
-        let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteAddress)
+        let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
 
         let dnsServerStrings = tunnelConfiguration.interface.dns.map { $0.stringRepresentation }
         let dnsSettings = NEDNSSettings(servers: dnsServerStrings)
@@ -84,25 +76,34 @@ class PacketTunnelSettingsGenerator {
         networkSettings.dnsSettings = dnsSettings
 
         let mtu = tunnelConfiguration.interface.mtu ?? 0
+
+        /* 0 means automatic MTU. In theory, we should just do
+         * `networkSettings.tunnelOverheadBytes = 80` but in
+         * practice there are too many broken networks out there.
+         * Instead set it to 1280. Boohoo. Maybe someday we'll
+         * add a nob, maybe, or iOS will do probing for us.
+         */
         if mtu == 0 {
-            // 0 imples automatic MTU, where we set overhead as 80 bytes, which is the worst case for WireGuard
+            #if os(iOS)
+            networkSettings.mtu = NSNumber(value: 1280)
+            #elseif os(macOS)
             networkSettings.tunnelOverheadBytes = 80
+            #else
+            #error("Unimplemented")
+            #endif
         } else {
             networkSettings.mtu = NSNumber(value: mtu)
         }
 
         let (ipv4Routes, ipv6Routes) = routes()
         let (ipv4IncludedRoutes, ipv6IncludedRoutes) = includedRoutes()
-        let (ipv4ExcludedRoutes, ipv6ExcludedRoutes) = excludedRoutes()
 
         let ipv4Settings = NEIPv4Settings(addresses: ipv4Routes.map { $0.destinationAddress }, subnetMasks: ipv4Routes.map { $0.destinationSubnetMask })
         ipv4Settings.includedRoutes = ipv4IncludedRoutes
-        ipv4Settings.excludedRoutes = ipv4ExcludedRoutes
         networkSettings.ipv4Settings = ipv4Settings
 
         let ipv6Settings = NEIPv6Settings(addresses: ipv6Routes.map { $0.destinationAddress }, networkPrefixLengths: ipv6Routes.map { $0.destinationNetworkPrefixLength })
         ipv6Settings.includedRoutes = ipv6IncludedRoutes
-        ipv6Settings.excludedRoutes = ipv6ExcludedRoutes
         networkSettings.ipv6Settings = ipv6Settings
 
         return networkSettings
@@ -151,29 +152,5 @@ class PacketTunnelSettingsGenerator {
             }
         }
         return (ipv4IncludedRoutes, ipv6IncludedRoutes)
-    }
-
-    private func excludedRoutes() -> ([NEIPv4Route], [NEIPv6Route]) {
-        var ipv4ExcludedRoutes = [NEIPv4Route]()
-        var ipv6ExcludedRoutes = [NEIPv6Route]()
-        for endpoint in resolvedEndpoints {
-            guard let endpoint = endpoint else { continue }
-            switch endpoint.host {
-            case .ipv4(let address):
-                ipv4ExcludedRoutes.append(NEIPv4Route(destinationAddress: "\(address)", subnetMask: "255.255.255.255"))
-            case .ipv6(let address):
-                ipv6ExcludedRoutes.append(NEIPv6Route(destinationAddress: "\(address)", networkPrefixLength: NSNumber(value: UInt8(128))))
-            default:
-                fatalError()
-            }
-        }
-        return (ipv4ExcludedRoutes, ipv6ExcludedRoutes)
-    }
-
-}
-
-private extension Data {
-    func hexEncodedString() -> String {
-        return self.map { String(format: "%02x", $0) }.joined()
     }
 }

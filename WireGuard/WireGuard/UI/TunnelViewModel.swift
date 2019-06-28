@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
-import UIKit
+import Foundation
 
-//swiftlint:disable:next type_body_length
 class TunnelViewModel {
 
-    enum InterfaceField {
+    enum InterfaceField: CaseIterable {
         case name
         case privateKey
         case publicKey
@@ -15,6 +14,8 @@ class TunnelViewModel {
         case listenPort
         case mtu
         case dns
+        case status
+        case toggleStatus
 
         var localizedUIString: String {
             switch self {
@@ -26,6 +27,8 @@ class TunnelViewModel {
             case .listenPort: return tr("tunnelInterfaceListenPort")
             case .mtu: return tr("tunnelInterfaceMTU")
             case .dns: return tr("tunnelInterfaceDNS")
+            case .status: return tr("tunnelInterfaceStatus")
+            case .toggleStatus: return ""
             }
         }
     }
@@ -34,12 +37,15 @@ class TunnelViewModel {
         .generateKeyPair
     ]
 
-    enum PeerField {
+    enum PeerField: CaseIterable {
         case publicKey
         case preSharedKey
         case endpoint
         case persistentKeepAlive
         case allowedIPs
+        case rxBytes
+        case txBytes
+        case lastHandshakeTime
         case excludePrivateIPs
         case deletePeer
 
@@ -50,6 +56,9 @@ class TunnelViewModel {
             case .endpoint: return tr("tunnelPeerEndpoint")
             case .persistentKeepAlive: return tr("tunnelPeerPersistentKeepalive")
             case .allowedIPs: return tr("tunnelPeerAllowedIPs")
+            case .rxBytes: return tr("tunnelPeerRxBytes")
+            case .txBytes: return tr("tunnelPeerTxBytes")
+            case .lastHandshakeTime: return tr("tunnelPeerLastHandshakeTime")
             case .excludePrivateIPs: return tr("tunnelPeerExcludePrivateIPs")
             case .deletePeer: return tr("deletePeerButtonTitle")
             }
@@ -61,6 +70,19 @@ class TunnelViewModel {
     ]
 
     static let keyLengthInBase64 = 44
+
+    struct Changes {
+        enum FieldChange: Equatable {
+            case added
+            case removed
+            case modified(newValue: String)
+        }
+
+        var interfaceChanges: [InterfaceField: FieldChange]
+        var peerChanges: [(peerIndex: Int, changes: [PeerField: FieldChange])]
+        var peersRemovedIndices: [Int]
+        var peersInsertedIndices: [Int]
+    }
 
     class InterfaceData {
         var scratchpad = [InterfaceField: String]()
@@ -87,9 +109,9 @@ class TunnelViewModel {
                     scratchpad[field] = stringValue
                 }
                 if field == .privateKey {
-                    if stringValue.count == TunnelViewModel.keyLengthInBase64, let privateKey = Data(base64Encoded: stringValue), privateKey.count == TunnelConfiguration.keyLength {
-                        let publicKey = Curve25519.generatePublicKey(fromPrivateKey: privateKey)
-                        scratchpad[.publicKey] = publicKey.base64EncodedString()
+                    if stringValue.count == TunnelViewModel.keyLengthInBase64, let privateKey = Data(base64Key: stringValue), privateKey.count == TunnelConfiguration.keyLength {
+                        let publicKey = Curve25519.generatePublicKey(fromPrivateKey: privateKey).base64Key() ?? ""
+                        scratchpad[.publicKey] = publicKey
                     } else {
                         scratchpad.removeValue(forKey: .publicKey)
                     }
@@ -100,9 +122,14 @@ class TunnelViewModel {
         func populateScratchpad() {
             guard let config = validatedConfiguration else { return }
             guard let name = validatedName else { return }
+            scratchpad = TunnelViewModel.InterfaceData.createScratchPad(from: config, name: name)
+        }
+
+        private static func createScratchPad(from config: InterfaceConfiguration, name: String) -> [InterfaceField: String] {
+            var scratchpad = [InterfaceField: String]()
             scratchpad[.name] = name
-            scratchpad[.privateKey] = config.privateKey.base64EncodedString()
-            scratchpad[.publicKey] = config.publicKey.base64EncodedString()
+            scratchpad[.privateKey] = config.privateKey.base64Key() ?? ""
+            scratchpad[.publicKey] = config.publicKey.base64Key() ?? ""
             if !config.addresses.isEmpty {
                 scratchpad[.addresses] = config.addresses.map { $0.stringRepresentation }.joined(separator: ", ")
             }
@@ -115,9 +142,9 @@ class TunnelViewModel {
             if !config.dns.isEmpty {
                 scratchpad[.dns] = config.dns.map { $0.stringRepresentation }.joined(separator: ", ")
             }
+            return scratchpad
         }
 
-        //swiftlint:disable:next cyclomatic_complexity function_body_length
         func save() -> SaveResult<(String, InterfaceConfiguration)> {
             if let config = validatedConfiguration, let name = validatedName {
                 return .saved((name, config))
@@ -131,7 +158,7 @@ class TunnelViewModel {
                 fieldsWithError.insert(.privateKey)
                 return .error(tr("alertInvalidInterfaceMessagePrivateKeyRequired"))
             }
-            guard let privateKey = Data(base64Encoded: privateKeyString), privateKey.count == TunnelConfiguration.keyLength else {
+            guard let privateKey = Data(base64Key: privateKeyString), privateKey.count == TunnelConfiguration.keyLength else {
                 fieldsWithError.insert(.privateKey)
                 return .error(tr("alertInvalidInterfaceMessagePrivateKeyInvalid"))
             }
@@ -193,6 +220,30 @@ class TunnelViewModel {
                 return !self[field].isEmpty
             }
         }
+
+        func applyConfiguration(other: InterfaceConfiguration, otherName: String) -> [InterfaceField: Changes.FieldChange] {
+            if scratchpad.isEmpty {
+                populateScratchpad()
+            }
+            let otherScratchPad = InterfaceData.createScratchPad(from: other, name: otherName)
+            var changes = [InterfaceField: Changes.FieldChange]()
+            for field in InterfaceField.allCases {
+                switch (scratchpad[field] ?? "", otherScratchPad[field] ?? "") {
+                case ("", ""):
+                    break
+                case ("", _):
+                    changes[field] = .added
+                case (_, ""):
+                    changes[field] = .removed
+                case (let this, let other):
+                    if this != other {
+                        changes[field] = .modified(newValue: other)
+                    }
+                }
+            }
+            scratchpad = otherScratchPad
+            return changes
+        }
     }
 
     class PeerData {
@@ -200,6 +251,15 @@ class TunnelViewModel {
         var scratchpad = [PeerField: String]()
         var fieldsWithError = Set<PeerField>()
         var validatedConfiguration: PeerConfiguration?
+        var publicKey: Data? {
+            if let validatedConfiguration = validatedConfiguration {
+                return validatedConfiguration.publicKey
+            }
+            if let scratchPadPublicKey = scratchpad[.publicKey] {
+                return Data(base64Key: scratchPadPublicKey)
+            }
+            return nil
+        }
 
         private(set) var shouldAllowExcludePrivateIPsControl = false
         private(set) var shouldStronglyRecommendDNS = false
@@ -235,9 +295,17 @@ class TunnelViewModel {
 
         func populateScratchpad() {
             guard let config = validatedConfiguration else { return }
-            scratchpad[.publicKey] = config.publicKey.base64EncodedString()
-            if let preSharedKey = config.preSharedKey {
-                scratchpad[.preSharedKey] = preSharedKey.base64EncodedString()
+            scratchpad = TunnelViewModel.PeerData.createScratchPad(from: config)
+            updateExcludePrivateIPsFieldState()
+        }
+
+        private static func createScratchPad(from config: PeerConfiguration) -> [PeerField: String] {
+            var scratchpad = [PeerField: String]()
+            if let publicKey = config.publicKey.base64Key() {
+                scratchpad[.publicKey] = publicKey
+            }
+            if let preSharedKey = config.preSharedKey?.base64Key() {
+                scratchpad[.preSharedKey] = preSharedKey
             }
             if !config.allowedIPs.isEmpty {
                 scratchpad[.allowedIPs] = config.allowedIPs.map { $0.stringRepresentation }.joined(separator: ", ")
@@ -248,10 +316,18 @@ class TunnelViewModel {
             if let persistentKeepAlive = config.persistentKeepAlive {
                 scratchpad[.persistentKeepAlive] = String(persistentKeepAlive)
             }
-            updateExcludePrivateIPsFieldState()
+            if let rxBytes = config.rxBytes {
+                scratchpad[.rxBytes] = prettyBytes(rxBytes)
+            }
+            if let txBytes = config.txBytes {
+                scratchpad[.txBytes] = prettyBytes(txBytes)
+            }
+            if let lastHandshakeTime = config.lastHandshakeTime {
+                scratchpad[.lastHandshakeTime] = prettyTimeAgo(timestamp: lastHandshakeTime)
+            }
+            return scratchpad
         }
 
-        //swiftlint:disable:next cyclomatic_complexity
         func save() -> SaveResult<PeerConfiguration> {
             if let validatedConfiguration = validatedConfiguration {
                 return .saved(validatedConfiguration)
@@ -261,14 +337,14 @@ class TunnelViewModel {
                 fieldsWithError.insert(.publicKey)
                 return .error(tr("alertInvalidPeerMessagePublicKeyRequired"))
             }
-            guard let publicKey = Data(base64Encoded: publicKeyString), publicKey.count == TunnelConfiguration.keyLength else {
+            guard let publicKey = Data(base64Key: publicKeyString), publicKey.count == TunnelConfiguration.keyLength else {
                 fieldsWithError.insert(.publicKey)
                 return .error(tr("alertInvalidPeerMessagePublicKeyInvalid"))
             }
             var config = PeerConfiguration(publicKey: publicKey)
             var errorMessages = [String]()
             if let preSharedKeyString = scratchpad[.preSharedKey] {
-                if let preSharedKey = Data(base64Encoded: preSharedKeyString), preSharedKey.count == TunnelConfiguration.keyLength {
+                if let preSharedKey = Data(base64Key: preSharedKeyString), preSharedKey.count == TunnelConfiguration.keyLength {
                     config.preSharedKey = preSharedKey
                 } else {
                     fieldsWithError.insert(.preSharedKey)
@@ -329,42 +405,76 @@ class TunnelViewModel {
             "193.0.0.0/8", "194.0.0.0/7", "196.0.0.0/6", "200.0.0.0/5", "208.0.0.0/4"
         ]
 
+        static func excludePrivateIPsFieldStates(isSinglePeer: Bool, allowedIPs: Set<String>) -> (shouldAllowExcludePrivateIPsControl: Bool, excludePrivateIPsValue: Bool) {
+            guard isSinglePeer else {
+                return (shouldAllowExcludePrivateIPsControl: false, excludePrivateIPsValue: false)
+            }
+            let allowedIPStrings = Set<String>(allowedIPs)
+            if allowedIPStrings.contains(TunnelViewModel.PeerData.ipv4DefaultRouteString) {
+                return (shouldAllowExcludePrivateIPsControl: true, excludePrivateIPsValue: false)
+            } else if allowedIPStrings.isSuperset(of: TunnelViewModel.PeerData.ipv4DefaultRouteModRFC1918String) {
+                return (shouldAllowExcludePrivateIPsControl: true, excludePrivateIPsValue: true)
+            } else {
+                return (shouldAllowExcludePrivateIPsControl: false, excludePrivateIPsValue: false)
+            }
+        }
+
         func updateExcludePrivateIPsFieldState() {
             if scratchpad.isEmpty {
                 populateScratchpad()
             }
             let allowedIPStrings = Set<String>(scratchpad[.allowedIPs].splitToArray(trimmingCharacters: .whitespacesAndNewlines))
+            (shouldAllowExcludePrivateIPsControl, excludePrivateIPsValue) = TunnelViewModel.PeerData.excludePrivateIPsFieldStates(isSinglePeer: numberOfPeers == 1, allowedIPs: allowedIPStrings)
             shouldStronglyRecommendDNS = allowedIPStrings.contains(TunnelViewModel.PeerData.ipv4DefaultRouteString) || allowedIPStrings.isSuperset(of: TunnelViewModel.PeerData.ipv4DefaultRouteModRFC1918String)
-            guard numberOfPeers == 1 else {
-                shouldAllowExcludePrivateIPsControl = false
-                excludePrivateIPsValue = false
-                return
-            }
-            if allowedIPStrings.contains(TunnelViewModel.PeerData.ipv4DefaultRouteString) {
-                shouldAllowExcludePrivateIPsControl = true
-                excludePrivateIPsValue = false
-            } else if allowedIPStrings.isSuperset(of: TunnelViewModel.PeerData.ipv4DefaultRouteModRFC1918String) {
-                shouldAllowExcludePrivateIPsControl = true
-                excludePrivateIPsValue = true
+        }
+
+        static func normalizedIPAddressRangeStrings(_ list: [String]) -> [String] {
+            return list.compactMap { IPAddressRange(from: $0) }.map { $0.stringRepresentation }
+        }
+
+        static func modifiedAllowedIPs(currentAllowedIPs: [String], excludePrivateIPs: Bool, dnsServers: [String], oldDNSServers: [String]?) -> [String] {
+            let normalizedDNSServers = normalizedIPAddressRangeStrings(dnsServers)
+            let normalizedOldDNSServers = oldDNSServers == nil ? normalizedDNSServers : normalizedIPAddressRangeStrings(oldDNSServers!)
+            let ipv6Addresses = normalizedIPAddressRangeStrings(currentAllowedIPs.filter { $0.contains(":") })
+            if excludePrivateIPs {
+                return ipv6Addresses + TunnelViewModel.PeerData.ipv4DefaultRouteModRFC1918String + normalizedDNSServers
             } else {
-                shouldAllowExcludePrivateIPsControl = false
-                excludePrivateIPsValue = false
+                return ipv6Addresses.filter { !normalizedOldDNSServers.contains($0) } + [TunnelViewModel.PeerData.ipv4DefaultRouteString]
             }
         }
 
-        func excludePrivateIPsValueChanged(isOn: Bool, dnsServers: String) {
+        func excludePrivateIPsValueChanged(isOn: Bool, dnsServers: String, oldDNSServers: String? = nil) {
             let allowedIPStrings = scratchpad[.allowedIPs].splitToArray(trimmingCharacters: .whitespacesAndNewlines)
             let dnsServerStrings = dnsServers.splitToArray(trimmingCharacters: .whitespacesAndNewlines)
-            let ipv6Addresses = allowedIPStrings.filter { $0.contains(":") }
-            let modifiedAllowedIPStrings: [String]
-            if isOn {
-                modifiedAllowedIPStrings = ipv6Addresses + TunnelViewModel.PeerData.ipv4DefaultRouteModRFC1918String + dnsServerStrings
-            } else {
-                modifiedAllowedIPStrings = ipv6Addresses + [TunnelViewModel.PeerData.ipv4DefaultRouteString]
-            }
+            let oldDNSServerStrings = oldDNSServers?.splitToArray(trimmingCharacters: .whitespacesAndNewlines)
+            let modifiedAllowedIPStrings = TunnelViewModel.PeerData.modifiedAllowedIPs(currentAllowedIPs: allowedIPStrings, excludePrivateIPs: isOn, dnsServers: dnsServerStrings, oldDNSServers: oldDNSServerStrings)
             scratchpad[.allowedIPs] = modifiedAllowedIPStrings.joined(separator: ", ")
             validatedConfiguration = nil
             excludePrivateIPsValue = isOn
+        }
+
+        func applyConfiguration(other: PeerConfiguration) -> [PeerField: Changes.FieldChange] {
+            if scratchpad.isEmpty {
+                populateScratchpad()
+            }
+            let otherScratchPad = PeerData.createScratchPad(from: other)
+            var changes = [PeerField: Changes.FieldChange]()
+            for field in PeerField.allCases {
+                switch (scratchpad[field] ?? "", otherScratchPad[field] ?? "") {
+                case ("", ""):
+                    break
+                case ("", _):
+                    changes[field] = .added
+                case (_, ""):
+                    changes[field] = .removed
+                case (let this, let other):
+                    if this != other {
+                        changes[field] = .modified(newValue: other)
+                    }
+                }
+            }
+            scratchpad = otherScratchPad
+            return changes
         }
     }
 
@@ -373,8 +483,8 @@ class TunnelViewModel {
         case error(String)
     }
 
-    var interfaceData: InterfaceData
-    var peersData: [PeerData]
+    private(set) var interfaceData: InterfaceData
+    private(set) var peersData: [PeerData]
 
     init(tunnelConfiguration: TunnelConfiguration?) {
         let interfaceData = InterfaceData()
@@ -419,6 +529,17 @@ class TunnelViewModel {
         }
     }
 
+    func updateDNSServersInAllowedIPsIfRequired(oldDNSServers: String, newDNSServers: String) -> Bool {
+        guard peersData.count == 1, let firstPeer = peersData.first else { return false }
+        guard firstPeer.shouldAllowExcludePrivateIPsControl && firstPeer.excludePrivateIPsValue else { return false }
+        let allowedIPStrings = firstPeer[.allowedIPs].splitToArray(trimmingCharacters: .whitespacesAndNewlines)
+        let oldDNSServerStrings = TunnelViewModel.PeerData.normalizedIPAddressRangeStrings(oldDNSServers.splitToArray(trimmingCharacters: .whitespacesAndNewlines))
+        let newDNSServerStrings = TunnelViewModel.PeerData.normalizedIPAddressRangeStrings(newDNSServers.splitToArray(trimmingCharacters: .whitespacesAndNewlines))
+        let updatedAllowedIPStrings = allowedIPStrings.filter { !oldDNSServerStrings.contains($0) } + newDNSServerStrings
+        firstPeer[.allowedIPs] = updatedAllowedIPStrings.joined(separator: ", ")
+        return true
+    }
+
     func save() -> SaveResult<TunnelConfiguration> {
         let interfaceSaveResult = interfaceData.save()
         let peerSaveResults = peersData.map { $0.save() } // Save all, to help mark erroring fields in red
@@ -447,35 +568,130 @@ class TunnelViewModel {
             return .saved(tunnelConfiguration)
         }
     }
+
+    func asWgQuickConfig() -> String? {
+        let saveResult = save()
+        if case .saved(let tunnelConfiguration) = saveResult {
+            return tunnelConfiguration.asWgQuickConfig()
+        }
+        return nil
+    }
+
+    @discardableResult
+    func applyConfiguration(other: TunnelConfiguration) -> Changes {
+        // Replaces current data with data from other TunnelConfiguration, ignoring any changes in peer ordering.
+
+        let interfaceChanges = interfaceData.applyConfiguration(other: other.interface, otherName: other.name ?? "")
+
+        var peerChanges = [(peerIndex: Int, changes: [PeerField: Changes.FieldChange])]()
+        for otherPeer in other.peers {
+            if let peersDataIndex = peersData.firstIndex(where: { $0.publicKey == otherPeer.publicKey }) {
+                let peerData = peersData[peersDataIndex]
+                let changes = peerData.applyConfiguration(other: otherPeer)
+                if !changes.isEmpty {
+                    peerChanges.append((peerIndex: peersDataIndex, changes: changes))
+                }
+            }
+        }
+
+        var removedPeerIndices = [Int]()
+        for (index, peerData) in peersData.enumerated().reversed() {
+            if let peerPublicKey = peerData.publicKey, !other.peers.contains(where: { $0.publicKey == peerPublicKey}) {
+                removedPeerIndices.append(index)
+                peersData.remove(at: index)
+            }
+        }
+
+        var addedPeerIndices = [Int]()
+        for otherPeer in other.peers {
+            if !peersData.contains(where: { $0.publicKey == otherPeer.publicKey }) {
+                addedPeerIndices.append(peersData.count)
+                let peerData = PeerData(index: peersData.count)
+                peerData.validatedConfiguration = otherPeer
+                peersData.append(peerData)
+            }
+        }
+
+        for (index, peer) in peersData.enumerated() {
+            peer.index = index
+            peer.numberOfPeers = peersData.count
+            peer.updateExcludePrivateIPsFieldState()
+        }
+
+        return Changes(interfaceChanges: interfaceChanges, peerChanges: peerChanges, peersRemovedIndices: removedPeerIndices, peersInsertedIndices: addedPeerIndices)
+    }
 }
 
-extension TunnelViewModel {
-    static func activateOnDemandOptionText(for activateOnDemandOption: ActivateOnDemandOption) -> String {
-        switch activateOnDemandOption {
-        case .none:
-            return tr("tunnelOnDemandOptionOff")
-        case .useOnDemandOverWiFiOrCellular:
-            return tr("tunnelOnDemandOptionWiFiOrCellular")
-        case .useOnDemandOverWiFiOnly:
-            return tr("tunnelOnDemandOptionWiFiOnly")
-        case .useOnDemandOverCellularOnly:
-            return tr("tunnelOnDemandOptionCellularOnly")
-        }
+private func prettyBytes(_ bytes: UInt64) -> String {
+    switch bytes {
+    case 0..<1024:
+        return "\(bytes) B"
+    case 1024 ..< (1024 * 1024):
+        return String(format: "%.2f", Double(bytes) / 1024) + " KiB"
+    case 1024 ..< (1024 * 1024 * 1024):
+        return String(format: "%.2f", Double(bytes) / (1024 * 1024)) + " MiB"
+    case 1024 ..< (1024 * 1024 * 1024 * 1024):
+        return String(format: "%.2f", Double(bytes) / (1024 * 1024 * 1024)) + " GiB"
+    default:
+        return String(format: "%.2f", Double(bytes) / (1024 * 1024 * 1024 * 1024)) + " TiB"
     }
+}
 
-    static func activateOnDemandDetailText(for activateOnDemandSetting: ActivateOnDemandSetting?) -> String {
-        if let activateOnDemandSetting = activateOnDemandSetting {
-            if activateOnDemandSetting.isActivateOnDemandEnabled {
-                return TunnelViewModel.activateOnDemandOptionText(for: activateOnDemandSetting.activateOnDemandOption)
-            } else {
-                return TunnelViewModel.activateOnDemandOptionText(for: .none)
-            }
-        } else {
-            return TunnelViewModel.activateOnDemandOptionText(for: .none)
-        }
+private func prettyTimeAgo(timestamp: Date) -> String {
+    let now = Date()
+    let timeInterval = Int64(now.timeIntervalSince(timestamp))
+    switch timeInterval {
+    case ..<0: return tr("tunnelHandshakeTimestampSystemClockBackward")
+    case 0: return tr("tunnelHandshakeTimestampNow")
+    default:
+        return tr(format: "tunnelHandshakeTimestampAgo (%@)", prettyTime(secondsLeft: timeInterval))
     }
+}
 
-    static func defaultActivateOnDemandOption() -> ActivateOnDemandOption {
-        return .useOnDemandOverWiFiOrCellular
+private func prettyTime(secondsLeft: Int64) -> String {
+    var left = secondsLeft
+    var timeStrings = [String]()
+    let years = left / (365 * 24 * 60 * 60)
+    left = left % (365 * 24 * 60 * 60)
+    let days = left / (24 * 60 * 60)
+    left = left % (24 * 60 * 60)
+    let hours = left / (60 * 60)
+    left = left % (60 * 60)
+    let minutes = left / 60
+    let seconds = left % 60
+
+    #if os(iOS)
+    if years > 0 {
+        return years == 1 ? tr(format: "tunnelHandshakeTimestampYear (%d)", years) : tr(format: "tunnelHandshakeTimestampYears (%d)", years)
     }
+    if days > 0 {
+        return days == 1 ? tr(format: "tunnelHandshakeTimestampDay (%d)", days) : tr(format: "tunnelHandshakeTimestampDays (%d)", days)
+    }
+    if hours > 0 {
+        let hhmmss = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        return tr(format: "tunnelHandshakeTimestampHours hh:mm:ss (%@)", hhmmss)
+    }
+    if minutes > 0 {
+        let mmss = String(format: "%02d:%02d", minutes, seconds)
+        return tr(format: "tunnelHandshakeTimestampMinutes mm:ss (%@)", mmss)
+    }
+    return seconds == 1 ? tr(format: "tunnelHandshakeTimestampSecond (%d)", seconds) : tr(format: "tunnelHandshakeTimestampSeconds (%d)", seconds)
+    #elseif os(macOS)
+    if years > 0 {
+        timeStrings.append(years == 1 ? tr(format: "tunnelHandshakeTimestampYear (%d)", years) : tr(format: "tunnelHandshakeTimestampYears (%d)", years))
+    }
+    if days > 0 {
+        timeStrings.append(days == 1 ? tr(format: "tunnelHandshakeTimestampDay (%d)", days) : tr(format: "tunnelHandshakeTimestampDays (%d)", days))
+    }
+    if hours > 0 {
+        timeStrings.append(hours == 1 ? tr(format: "tunnelHandshakeTimestampHour (%d)", hours) : tr(format: "tunnelHandshakeTimestampHours (%d)", hours))
+    }
+    if minutes > 0 {
+        timeStrings.append(minutes == 1 ? tr(format: "tunnelHandshakeTimestampMinute (%d)", minutes) : tr(format: "tunnelHandshakeTimestampMinutes (%d)", minutes))
+    }
+    if seconds > 0 {
+        timeStrings.append(seconds == 1 ? tr(format: "tunnelHandshakeTimestampSecond (%d)", seconds) : tr(format: "tunnelHandshakeTimestampSeconds (%d)", seconds))
+    }
+    return timeStrings.joined(separator: ", ")
+    #endif
 }

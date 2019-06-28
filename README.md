@@ -1,19 +1,14 @@
-# [WireGuard](https://www.wireguard.com/) for iOS
+# [WireGuard](https://www.wireguard.com/) for iOS and macOS
+
+This project contains an application for iOS and for macOS, as well as many components shared between the two of them. You may toggle between the two platforms by selecting the target from within Xcode.
 
 ## Building
 
 - Clone this repo:
 
 ```
-$ git clone https://git.zx2c4.com/wireguard-ios
-$ cd wireguard-ios
-```
-
-- Init and update submodule:
-
-```
-$ git submodule init
-$ git submodule update
+$ git clone https://git.zx2c4.com/wireguard-apple
+$ cd wireguard-apple
 ```
 
 - Rename and populate developer team ID file:
@@ -23,19 +18,19 @@ $ cp WireGuard/WireGuard/Config/Developer.xcconfig.template WireGuard/WireGuard/
 $ vim WireGuard/WireGuard/Config/Developer.xcconfig
 ```
 
-- Install swiftlint:
+- Install swiftlint and go:
 
 ```
-$ brew install swiftlint
+$ brew install swiftlint go
 ```
 
-- Open project in XCode:
+- Open project in Xcode:
 
 ```
 $ open ./WireGuard/WireGuard.xcodeproj
 ```
 
-- Flip switches, press buttons, and make whirling noises until XCode builds it.
+- Flip switches, press buttons, and make whirling noises until Xcode builds it.
 
 ## MIT License
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import Foundation
 
@@ -7,6 +7,7 @@ enum ZipArchiveError: WireGuardAppError {
     case cantOpenInputZipFile
     case cantOpenOutputZipFileForWriting
     case badArchive
+    case noTunnelsInZipArchive
 
     var alertText: AlertText {
         switch self {
@@ -16,6 +17,8 @@ enum ZipArchiveError: WireGuardAppError {
             return (tr("alertCantOpenOutputZipFileForWritingTitle"), tr("alertCantOpenOutputZipFileForWritingMessage"))
         case .badArchive:
             return (tr("alertBadArchiveTitle"), tr("alertBadArchiveMessage"))
+        case .noTunnelsInZipArchive:
+            return (tr("alertNoTunnelsInImportedZipArchiveTitle"), tr("alertNoTunnelsInImportedZipArchiveMessage"))
         }
     }
 }
@@ -31,7 +34,7 @@ class ZipArchive {
             let fileName = input.fileName
             let contents = input.contents
             zipOpenNewFileInZip(zipFile, fileName.cString(using: .utf8), nil, nil, 0, nil, 0, nil, Z_DEFLATED, Z_DEFAULT_COMPRESSION)
-            contents.withUnsafeBytes { (ptr: UnsafePointer<UInt8>) -> Void in
+            contents.withUnsafeUInt8Bytes { ptr -> Void in
                 zipWriteInFileInZip(zipFile, UnsafeRawPointer(ptr), UInt32(contents.count))
             }
             zipCloseFileInZip(zipFile)
@@ -42,6 +45,7 @@ class ZipArchive {
     static func unarchive(url: URL, requiredFileExtensions: [String]) throws -> [(fileBaseName: String, contents: Data)] {
 
         var results = [(fileBaseName: String, contents: Data)]()
+        var requiredFileExtensionsLowercased = requiredFileExtensions.map { $0.lowercased() }
 
         guard let zipFile = unzOpen64(url.path) else {
             throw ZipArchiveError.cantOpenInputZipFile
@@ -70,7 +74,7 @@ class ZipArchive {
             let isDirectory = (lastChar == "/" || lastChar == "\\")
             let fileURL = URL(fileURLWithFileSystemRepresentation: fileNameBuffer, isDirectory: isDirectory, relativeTo: nil)
 
-            if !isDirectory && requiredFileExtensions.contains(fileURL.pathExtension) {
+            if !isDirectory && requiredFileExtensionsLowercased.contains(fileURL.pathExtension.lowercased()) {
                 var unzippedData = Data()
                 var bytesRead: Int32 = 0
                 repeat {

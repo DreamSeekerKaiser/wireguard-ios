@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import UIKit
 
@@ -8,7 +8,6 @@ class MainViewController: UISplitViewController {
     var tunnelsManager: TunnelsManager?
     var onTunnelsManagerReady: ((TunnelsManager) -> Void)?
     var tunnelsListVC: TunnelsListTableViewController?
-    private var foregroundObservationToken: AnyObject?
 
     init() {
         let detailVC = UIViewController()
@@ -43,45 +42,25 @@ class MainViewController: UISplitViewController {
         TunnelsManager.create { [weak self] result in
             guard let self = self else { return }
 
-            if let error = result.error {
+            switch result {
+            case .failure(let error):
                 ErrorPresenter.showErrorAlert(error: error, from: self)
-                return
-            }
-            let tunnelsManager: TunnelsManager = result.value!
-
-            self.tunnelsManager = tunnelsManager
-            self.tunnelsListVC?.setTunnelsManager(tunnelsManager: tunnelsManager)
-
-            tunnelsManager.activationDelegate = self
-
-            self.onTunnelsManagerReady?(tunnelsManager)
-            self.onTunnelsManagerReady = nil
-        }
-
-        foregroundObservationToken = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: OperationQueue.main) { [weak self] _ in
-            guard let self = self else { return }
-            self.tunnelsManager?.reload { [weak self] hasChanges in
-                guard let self = self, let tunnelsManager = self.tunnelsManager, hasChanges else { return }
-
+            case .success(let tunnelsManager):
+                self.tunnelsManager = tunnelsManager
                 self.tunnelsListVC?.setTunnelsManager(tunnelsManager: tunnelsManager)
 
-                if self.isCollapsed {
-                    (self.viewControllers[0] as? UINavigationController)?.popViewController(animated: false)
-                } else {
-                    let detailVC = UIViewController()
-                    detailVC.view.backgroundColor = .white
-                    let detailNC = UINavigationController(rootViewController: detailVC)
-                    self.showDetailViewController(detailNC, sender: self)
-                }
+                tunnelsManager.activationDelegate = self
 
-                if let presentedNavController = self.presentedViewController as? UINavigationController, presentedNavController.viewControllers.first is TunnelEditTableViewController {
-                    self.presentedViewController?.dismiss(animated: false, completion: nil)
-                }
+                self.onTunnelsManagerReady?(tunnelsManager)
+                self.onTunnelsManagerReady = nil
             }
-
         }
     }
 
+    func allTunnelNames() -> [String]? {
+        guard let tunnelsManager = self.tunnelsManager else { return nil }
+        return tunnelsManager.mapTunnels { $0.name }
+    }
 }
 
 extension MainViewController: TunnelsManagerActivationDelegate {
@@ -109,19 +88,17 @@ extension MainViewController {
         }
     }
 
-    func showTunnelDetailForTunnel(named tunnelName: String, animated: Bool) {
+    func showTunnelDetailForTunnel(named tunnelName: String, animated: Bool, shouldToggleStatus: Bool) {
         let showTunnelDetailBlock: (TunnelsManager) -> Void = { [weak self] tunnelsManager in
+            guard let self = self else { return }
+            guard let tunnelsListVC = self.tunnelsListVC else { return }
             if let tunnel = tunnelsManager.tunnel(named: tunnelName) {
-                let tunnelDetailVC = TunnelDetailTableViewController(tunnelsManager: tunnelsManager, tunnel: tunnel)
-                let tunnelDetailNC = UINavigationController(rootViewController: tunnelDetailVC)
-                tunnelDetailNC.restorationIdentifier = "DetailNC"
-                if let self = self {
-                    if animated {
-                        self.showDetailViewController(tunnelDetailNC, sender: self)
-                    } else {
-                        UIView.performWithoutAnimation {
-                            self.showDetailViewController(tunnelDetailNC, sender: self)
-                        }
+                tunnelsListVC.showTunnelDetail(for: tunnel, animated: false)
+                if shouldToggleStatus {
+                    if tunnel.status == .inactive {
+                        tunnelsManager.startActivation(of: tunnel)
+                    } else if tunnel.status == .active {
+                        tunnelsManager.startDeactivation(of: tunnel)
                     }
                 }
             }
@@ -130,6 +107,19 @@ extension MainViewController {
             showTunnelDetailBlock(tunnelsManager)
         } else {
             onTunnelsManagerReady = showTunnelDetailBlock
+        }
+    }
+
+    func importFromDisposableFile(url: URL) {
+        let importFromFileBlock: (TunnelsManager) -> Void = { [weak self] tunnelsManager in
+            TunnelImporter.importFromFile(urls: [url], into: tunnelsManager, sourceVC: self, errorPresenterType: ErrorPresenter.self) {
+                _ = FileManager.deleteFile(at: url)
+            }
+        }
+        if let tunnelsManager = tunnelsManager {
+            importFromFileBlock(tunnelsManager)
+        } else {
+            onTunnelsManagerReady = importFromFileBlock
         }
     }
 }

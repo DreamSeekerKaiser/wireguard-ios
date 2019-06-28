@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import Foundation
 import Network
@@ -29,6 +29,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         configureLogger()
+        #if os(macOS)
+        wgEnableRoaming(true)
+        #endif
 
         wg_log(.info, message: "Starting tunnel from the " + (activationAttemptId == nil ? "OS directly, rather than the app" : "app"))
 
@@ -65,6 +68,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 if getsockopt(fileDescriptor, 2 /* SYSPROTO_CONTROL */, 2 /* UTUN_OPT_IFNAME */, ifnamePtr, &ifnameSize) == 0 {
                     self.ifname = String(cString: ifnamePtr)
                 }
+                ifnamePtr.deallocate()
                 wg_log(.info, message: "Tunnel interface is \(self.ifname ?? "unknown")")
                 let handle = self.packetTunnelSettingsGenerator!.uapiConfiguration().withGoString { return wgTurnOn($0, fileDescriptor) }
                 if handle < 0 {
@@ -90,10 +94,35 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             wgTurnOff(handle)
         }
         completionHandler()
+
+        #if os(macOS)
+        // HACK: This is a filthy hack to work around Apple bug 32073323 (dup'd by us as 47526107).
+        // Remove it when they finally fix this upstream and the fix has been rolled out to
+        // sufficient quantities of users.
+        exit(0)
+        #endif
+    }
+
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
+        guard let completionHandler = completionHandler else { return }
+        guard let handle = handle else {
+            completionHandler(nil)
+            return
+        }
+        if messageData.count == 1 && messageData[0] == 0 {
+            guard let settings = wgGetConfig(handle) else {
+                completionHandler(nil)
+                return
+            }
+            completionHandler(String(cString: settings).data(using: .utf8)!)
+            free(settings)
+        } else {
+            completionHandler(nil)
+        }
     }
 
     private func configureLogger() {
-        Logger.configureGlobal(withFilePath: FileManager.networkExtensionLogFileURL?.path)
+        Logger.configureGlobal(tagged: "NET", withFilePath: FileManager.logFileURL?.path)
         wgSetLogger { level, msgC in
             guard let msgC = msgC else { return }
             let logType: OSLogType
@@ -112,16 +141,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func pathUpdate(path: Network.NWPath) {
-        guard let handle = handle, let packetTunnelSettingsGenerator = packetTunnelSettingsGenerator else { return }
+        guard let handle = handle else { return }
         wg_log(.debug, message: "Network change detected with \(path.status) route and interface order \(path.availableInterfaces)")
-        _ = packetTunnelSettingsGenerator.endpointUapiConfiguration().withGoString { return wgSetConfig(handle, $0) }
-        var interfaces = path.availableInterfaces
-        if let ifname = ifname {
-            interfaces = interfaces.filter { $0.name != ifname }
+
+        #if os(iOS)
+        if let packetTunnelSettingsGenerator = packetTunnelSettingsGenerator {
+            _ = packetTunnelSettingsGenerator.endpointUapiConfiguration().withGoString { return wgSetConfig(handle, $0) }
         }
-        if let ifscope = interfaces.first?.index {
-            wgBindInterfaceScope(handle, Int32(ifscope))
-        }
+        #endif
+        wgBumpSockets(handle)
     }
 }
 

@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import UIKit
 import os.log
 
-class ErrorPresenter {
-    static func showErrorAlert(error: WireGuardAppError, from sourceVC: UIViewController?, onPresented: (() -> Void)? = nil, onDismissal: (() -> Void)? = nil) {
-        let (title, message) = error.alertText
-        showErrorAlert(title: title, message: message, from: sourceVC, onPresented: onPresented, onDismissal: onDismissal)
-    }
-
-    static func showErrorAlert(title: String, message: String, from sourceVC: UIViewController?, onPresented: (() -> Void)? = nil, onDismissal: (() -> Void)? = nil) {
-        guard let sourceVC = sourceVC else { return }
+class ErrorPresenter: ErrorPresenterProtocol {
+    static func showErrorAlert(title: String, message: String, from sourceVC: AnyObject?, onPresented: (() -> Void)?, onDismissal: (() -> Void)?) {
+        guard let sourceVC = sourceVC as? UIViewController else { return }
 
         let okAction = UIAlertAction(title: "OK", style: .default) { _ in
             onDismissal?()

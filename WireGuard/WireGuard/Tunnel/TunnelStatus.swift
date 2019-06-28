@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
 import Foundation
 import NetworkExtension
@@ -27,6 +27,8 @@ import NetworkExtension
             self = .reasserting
         case .invalid:
             self = .inactive
+        @unknown default:
+            fatalError()
         }
     }
 }
@@ -54,6 +56,8 @@ extension NEVPNStatus: CustomDebugStringConvertible {
         case .disconnecting: return "disconnecting"
         case .reasserting: return "reasserting"
         case .invalid: return "invalid"
+        @unknown default:
+            fatalError()
         }
     }
 }

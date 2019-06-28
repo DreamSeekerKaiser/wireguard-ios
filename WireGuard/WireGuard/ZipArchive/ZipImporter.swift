@@ -1,18 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Copyright © 2018 WireGuard LLC. All Rights Reserved.
+// Copyright © 2018-2019 WireGuard LLC. All Rights Reserved.
 
-import UIKit
-
-enum ZipImporterError: WireGuardAppError {
-    case noTunnelsInZipArchive
-
-    var alertText: AlertText {
-        return (tr("alertNoTunnelsInImportedZipArchiveTitle"), tr("alertNoTunnelsInImportedZipArchiveMessage"))
-    }
-}
+import Foundation
 
 class ZipImporter {
-    static func importConfigFiles(from url: URL, completion: @escaping (WireGuardResult<[TunnelConfiguration?]>) -> Void) {
+    static func importConfigFiles(from url: URL, completion: @escaping (Result<[TunnelConfiguration?], ZipArchiveError>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             var unarchivedFiles: [(fileBaseName: String, contents: Data)]
             do {
@@ -28,16 +20,16 @@ class ZipImporter {
                 }
 
                 if unarchivedFiles.isEmpty {
-                    throw ZipImporterError.noTunnelsInZipArchive
+                    throw ZipArchiveError.noTunnelsInZipArchive
                 }
-            } catch let error as WireGuardAppError {
+            } catch let error as ZipArchiveError {
                 DispatchQueue.main.async { completion(.failure(error)) }
                 return
             } catch {
                 fatalError()
             }
 
-            unarchivedFiles.sort { $0.fileBaseName < $1.fileBaseName }
+            unarchivedFiles.sort { TunnelsManager.tunnelNameIsLessThan($0.fileBaseName, $1.fileBaseName) }
             var configs: [TunnelConfiguration?] = Array(repeating: nil, count: unarchivedFiles.count)
             for (index, file) in unarchivedFiles.enumerated() {
                 if index > 0 && file == unarchivedFiles[index - 1] {
